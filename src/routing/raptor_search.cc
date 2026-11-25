@@ -84,6 +84,7 @@ std::string_view location_match_mode_str(location_match_mode const mode) {
 
 }  // namespace
 
+
 routing_result raptor_search_default(
     timetable const& tt,
     rt_timetable const* rtt,
