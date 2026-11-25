@@ -1,12 +1,5 @@
 #pragma once
 
-#include "fmt/format.h"
-
-#include "utl/enumerate.h"
-#include "utl/equal_ranges_linear.h"
-#include "utl/erase_if.h"
-#include "utl/timing.h"
-
 #include "nigiri/for_each_meta.h"
 #include "nigiri/get_otel_tracer.h"
 #include "nigiri/logging.h"
@@ -23,6 +16,13 @@
 #include "nigiri/rt/rt_timetable.h"
 #include "nigiri/timetable.h"
 #include "nigiri/types.h"
+
+#include "fmt/format.h"
+//#include "q_journeys.h"
+#include "utl/enumerate.h"
+#include "utl/equal_ranges_linear.h"
+#include "utl/erase_if.h"
+#include "utl/timing.h"
 
 namespace nigiri::routing {
 
@@ -70,6 +70,14 @@ struct routing_result {
   search_stats search_stats_;
   std::map<std::string, std::uint64_t> algo_stats_;
 };
+/*
+struct q_journeys_routing_result {
+  q_journeys const* journeys_{nullptr};
+  interval<unixtime_t> interval_;
+  search_stats search_stats_;
+  std::map<std::string, std::uint64_t> algo_stats_;
+};
+*/
 
 template <direction SearchDir, typename Algo>
 struct search {
@@ -256,7 +264,8 @@ struct search {
         span->SetAttribute("nigiri.search.timeout_reached",
                            is_timeout_reached());
         break;
-      } else {
+      }
+      else {
         trace(
             "  continue: extend_earlier={}, "
             "extend_later={}, initial={}, interval={}, timetable={}, "

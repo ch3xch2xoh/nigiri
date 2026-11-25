@@ -51,6 +51,7 @@ struct pareto_set {
     return els_.erase(from, to);
   }
   void clear() { els_.clear(); }
+  int add(int _cpp_par_);
 
   std::vector<T> els_;
 };

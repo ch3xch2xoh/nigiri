@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <utility>
 
 #include "nigiri/common/delta_t.h"
 #include "nigiri/common/linear_lower_bound.h"
@@ -133,7 +134,10 @@ struct raptor {
         require_bike_transport_{require_bike_transport},
         require_car_transport_{require_car_transport},
         is_wheelchair_{is_wheelchair},
-        transfer_time_settings_{tts} {
+        transfer_time_settings_{tts},
+
+        blocked_routes_are_white_list_{false}
+{
     assert(Vias == via_stops_.size());
     reset_arrivals();
     if (!dist_to_end_.empty()) {
@@ -183,11 +187,18 @@ struct raptor {
     state_.station_mark_.set(to_idx(l), true);
   }
 
+  void set_blocked_routes(vector<uint32_t> br, bool is_whitelist) {
+    blocked_routes_ = std::move(br);
+    blocked_routes_are_white_list_ = is_whitelist;
+  }
+
   void execute(unixtime_t const start_time,
                std::uint8_t const max_transfers,
                unixtime_t const worst_time_at_dest,
                profile_idx_t const prf_idx,
-               pareto_set<journey>& results) {
+               pareto_set<journey>& results,
+               unsigned starting_round = 1U
+               ) {
     auto const end_k = std::min(max_transfers, kMaxTransfers) + 2U;
 
     auto const d_worst_at_dest = unix_to_delta(base(), worst_time_at_dest);
@@ -197,7 +208,7 @@ struct raptor {
 
     trace_print_init_state();
 
-    for (auto k = 1U; k != end_k; ++k) {
+    for (auto k = starting_round; k != end_k; ++k) {
       for (auto i = 0U; i != n_locations_; ++i) {
         for (auto v = 0U; v != Vias + 1; ++v) {
           best_[i][v] = get_best(round_times_[k][i][v], best_[i][v]);
@@ -307,7 +318,7 @@ struct raptor {
     }
 
     is_dest_.for_each_set_bit([&](auto const i) {
-      for (auto k = 1U; k != end_k; ++k) {
+      for (auto k = starting_round; k != end_k; ++k) {
         auto const dest_time = round_times_[k][i][Vias];
         if (dest_time != kInvalid) {
           trace("ADDING JOURNEY: start={}, dest={} @ {}, transfers={}\n",
@@ -351,6 +362,21 @@ private:
     auto any_marked = false;
     state_.route_mark_.for_each_set_bit([&](auto const r_idx) {
       auto const r = route_idx_t{r_idx};
+
+      //newly added //ignore route if it is blocked
+      bool blocked = false;
+      for (auto const route_idx : blocked_routes_) {
+        if (route_idx == r.v_) {
+          blocked = true;
+        }
+      }
+
+      if (!blocked_routes_are_white_list_ && blocked) {
+        return;
+      }
+      if (blocked_routes_are_white_list_ && !blocked) {
+        return;
+      }
 
       if constexpr (WithClaszFilter) {
         if (!is_allowed(allowed_claszes_, tt_.route_clasz_[r])) {
@@ -1093,7 +1119,11 @@ private:
             ++stats_.n_earliest_arrival_updated_by_route_;
             tmp_[l_idx][target_v] =
                 get_best(by_transport, tmp_[l_idx][target_v]);
+
+
             state_.station_mark_.set(l_idx, true);
+
+
             if (is_better(by_transport, current_best[v])) {
               current_best[v] = by_transport;
             }
@@ -1366,6 +1396,10 @@ private:
   bool require_car_transport_;
   bool is_wheelchair_;
   transfer_time_settings transfer_time_settings_;
+
+  //newly added
+  vector<uint32_t> blocked_routes_;
+  bool blocked_routes_are_white_list_;
 };
 
 }  // namespace nigiri::routing
