@@ -1,0 +1,46 @@
+added test/yen_raptor_search .cc/.h
+    - changed names in .h
+    - changed pareto_set import
+        -a added include/nigiri/routing/q_journeys.h
+        -simple minimal implementation, usure if working well with raptor
+    -changed signatures in .cc / updated the header include to yen_
+    -DOTO: replace raptor
+
+
+added include/nigiri/routing/yen_raptor_search .h
+    //added struct q_journeys_routing_result in include/nigiri/routing/search.h
+
+    added the src/routing/yen_raptor_search.cc
+    -changed signatures
+
+added include/nigiri/routing/q_journeys_search
+    moved the q_journeys_routing_result struct
+    changed result type in the state
+
+[time-gap]
+
+changed ending of all files to _cc / _h for testing purposes /comment out imports/class in the search .h
+
+added test/routing/raptor_test_modified
+
+
+NOTE: none of the added files are in cmake yet ...
+
+[Study Results]
+-tests exists
+-test executables are generated and defined in the CMakeLists.txt under # --- TEST --- add_executable
+-tests can be run directly from sourcefile with the > button or with
+-./nigiri-test --gtest_filter="routing.raptor_backward" from command line in the generated file.
+-./nigiri-test --gtest_list_tests
+
+-hrd parser = src/loader/hrd/service/service.cc // include/nigiri/loader/hrd/service/read_services.h
+
+-okay, i got a valid test case that i can modify a bit , schould be enought for testing
+-i am unsure where to start the yen part and seperate the raptore part ...
+
+
+[time-gap]
+-new routing/raptor_search_modified.cc + include/routing/raptor_search_modified.h
+-changed link in test/raptor_search_modified to that +changed include
+
+-created search_YR.h, which is header only and will contain the bulk of the algorithm
