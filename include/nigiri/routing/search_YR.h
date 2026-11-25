@@ -335,16 +335,13 @@ struct search_YR {
       if (empty_set) {
         break;
       }
-      /*
       if (timeout_ && (std::chrono::steady_clock::now() - processing_start_time) >= *timeout_){
         break;
       }
-      */
-      /*
-      if (100 <= set_A.size()) {
+      if (q_.min_connection_count_!= 0 && set_A.size() >= q_.min_connection_count_) {
         break;
       }
-      */
+
       for(const journey& j: current_pareto_set) {
         set_A.add_not_optimal(j);
         trie_node* current_node = &tree_root;

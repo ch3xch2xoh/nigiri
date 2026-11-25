@@ -13,6 +13,7 @@
 #include "nigiri/query_generator/generator.h"
 #include "nigiri/routing/raptor/raptor.h"
 #include "nigiri/routing/raptor_search.h"
+#include "nigiri/routing/raptor_search_modified.h"
 #include "nigiri/routing/search.h"
 #include "nigiri/timetable.h"
 #include "nigiri/types.h"
@@ -129,7 +130,7 @@ nigiri::pareto_set<nigiri::routing::journey> raptor_search(
   static auto search_state = routing::search_state{};
   static auto algo_state = algo_state_t{};
 
-  return *(routing::raptor_search(tt, nullptr, search_state, algo_state,
+  return *(routing::raptor_search_modified(tt, nullptr, search_state, algo_state,
                                   std::move(q), nigiri::direction::kForward)
                .journeys_);
 }
@@ -154,7 +155,7 @@ void process_queries(
         queries.size(), [&](auto& query_state, auto const q_idx) {
           try {
             auto const total_time_start = std::chrono::steady_clock::now();
-            auto const result = routing::raptor_search(
+            auto const result = routing::raptor_search_modified(
                 tt, nullptr, query_state.ss_, query_state.rs_,
                 queries[q_idx].q_, direction::kForward);
             auto const total_time_stop = std::chrono::steady_clock::now();
