@@ -69,6 +69,8 @@ struct routing_result {
   interval<unixtime_t> interval_;
   search_stats search_stats_;
   std::map<std::string, std::uint64_t> algo_stats_;
+  int raptor_exececutions = 0;
+  std::chrono::milliseconds raptor_time{0};
 };
 /*
 struct q_journeys_routing_result {

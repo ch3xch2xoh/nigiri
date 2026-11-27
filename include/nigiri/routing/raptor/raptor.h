@@ -364,6 +364,7 @@ private:
       auto const r = route_idx_t{r_idx};
 
       //newly added //ignore route if it is blocked
+
       bool blocked = false;
       for (auto const route_idx : blocked_routes_) {
         if (route_idx == r.v_) {

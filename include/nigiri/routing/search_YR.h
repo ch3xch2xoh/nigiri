@@ -238,7 +238,7 @@ struct search_YR {
     utl::sort(q_.destination_);
     q_.sanitize(tt);
 
-    std::cout << "Hello World!" << '\n';
+    //std::cout << "Hello World!" << '\n';
 
 
     //start_time_t start_time = q_.start_time_;
@@ -262,6 +262,9 @@ struct search_YR {
     auto scope = opentelemetry::trace::Scope{span};
 
     //state_.results_.clear();
+    int raptor_executions=0;
+    auto t2  = std::chrono::steady_clock::now();
+
 
     if (start_dest_overlap()) {
       return {.journeys_ = &state_.results_, .interval_ = search_interval_, .search_stats_ = stats_,
@@ -291,8 +294,10 @@ struct search_YR {
 
     {
       algo_state_t algo_state = algo_state_t{};
-      Algo algo = init(q_.allowed_claszes_, q_.require_bike_transport_,  q_.require_car_transport_, q_.transfer_time_settings_, algo_state);
 
+      //auto t1  = std::chrono::steady_clock::now();
+      Algo algo = init(q_.allowed_claszes_, q_.require_bike_transport_,  q_.require_car_transport_, q_.transfer_time_settings_, algo_state);
+      //std::cout << "raptor build execution time " << std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>((std::chrono::steady_clock::now() - t1)).count()) << "ms " << '\n';
 
       algo.next_start_time();
       algo.add_start(source_idx, start_time);
@@ -302,6 +307,7 @@ struct search_YR {
 
       algo.execute(start_time, q_.max_transfers_, worst_time_at_dest, q_.prf_idx_, original_pareto_set);
       total_algo_stats_ = total_algo_stats_ + algo.get_stats();
+      raptor_executions +=1;
 
       //Journey reconstruction
       for (auto& j : original_pareto_set) {
@@ -316,12 +322,31 @@ struct search_YR {
       }
     }
 
+    std::chrono::milliseconds raptor_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t2);
+    //================== Early exits
+    bool early_exit = false;
+    if (early_exit) {
+      for (const auto& x: original_pareto_set) {
+        state_.results_.add_not_optimal(x);
+      }
+
+      stats_.execute_time_ =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              (std::chrono::steady_clock::now() - processing_start_time));
+
+      return {.journeys_ = &state_.results_,
+              .interval_ = search_interval_,
+              .search_stats_ = stats_,
+              .algo_stats_ = total_algo_stats_.to_map()};
+    }
+
+
     //=============== Original Pareto Set is computed
     //setup final set
     pareto_set<journey> set_A;
     journey_sets set_B;
     trie_node tree_root;
-    uint32_t prev_route_idx;
+    //uint32_t prev_route_idx;
 
     // initialization
 
@@ -348,13 +373,10 @@ struct search_YR {
         for(size_t i=0; i < j.legs_.size() ; i++) {
           journey::leg const&  l = j.legs_[i];
           if (std::holds_alternative<journey::run_enter_exit>(l.uses_)) {
-
             //advance node
-            if (current_node->children.contains(l)) {
-              continue;
+            if (!(current_node->children.contains(l))) {
+              current_node->children.try_emplace(l, trie_node{});
             }
-            current_node->children.try_emplace(l, trie_node{});
-
             current_node = &(current_node->children.at(l));
           }
         }
@@ -362,6 +384,7 @@ struct search_YR {
 
       for(const journey& j: current_pareto_set) {
         trie_node* current_node = &tree_root;
+        uint32_t current_node_route_idx;
         trie_node* prev_node = current_node;
 
         vector<uint32_t> whitelist_routes{};
@@ -372,15 +395,22 @@ struct search_YR {
 
             //advance node
             if (current_node->children.contains(l)) {
-              if (current_node->children.at(l).undiscovered) {
-                current_node->children.at(l).undiscovered = true;
+              trie_node& c = current_node->children.at(l);
+              if (c.undiscovered) {
+                c.undiscovered = false;
               }
               else {
+                uint32_t next_route_idx = tt_.transport_route_[r.r_.t_.t_idx_].v_;
+                current_node_route_idx=next_route_idx;
+
+                prev_node = current_node;
+                current_node = &(c);
+                whitelist_routes.push_back(next_route_idx);
                 continue;
               }
             }
             else {
-              //this shouldn't happen?
+              std::cout << "Trie Structure Problem, missing node" << '\n';
             }
 
             pareto_set<journey> local_pareto_set;
@@ -401,17 +431,17 @@ struct search_YR {
               algo2.set_blocked_routes(whitelist_routes, true);
               unsigned max_transfers = whitelist_routes.size()-1;
               algo2.execute(start_time, max_transfers, worst_time_at_dest, q_.prf_idx_, local_pareto_set);
+              total_algo_stats_ = total_algo_stats_ + algo2.get_stats();
 
-              std::cout << "root path with max transfers = " << max_transfers << '\n';
-              std::cout << "local pareto set has after white: " << local_pareto_set.els_.size() << '\n';
+              if (!local_pareto_set.empty()){std::cout << "WARNING : locale white path finish "<< set_A.size() << '\n';}
+              //std::cout << "local pareto set has after white: " << local_pareto_set.els_.size() << '\n';
             }
 
             //to be blocked
             vector<uint32_t> br{};
-            uint32_t route_idx = tt_.transport_route_[r.r_.t_.t_idx_].v_;
             //br.push_back(route_idx);
             if (current_node==&tree_root){
-              for(const auto& c : current_node->children) {
+              for(const auto& c : tree_root.children) {
                 if (std::holds_alternative<journey::run_enter_exit>(c.first.uses_)) {
                   auto const& c_r = std::get<journey::run_enter_exit>(c.first.uses_);
                   uint32_t c_route_idx = tt_.transport_route_[c_r.r_.t_.t_idx_].v_;
@@ -424,7 +454,7 @@ struct search_YR {
                 if (std::holds_alternative<journey::run_enter_exit>(c.first.uses_)) {
                   auto const& c_r = std::get<journey::run_enter_exit>(c.first.uses_);
                   uint32_t c_route_idx = tt_.transport_route_[c_r.r_.t_.t_idx_].v_;
-                  if (c_route_idx == prev_route_idx) {
+                  if (c_route_idx == current_node_route_idx) {
                     for(const auto& cc : c.second.children) {
                       if (std::holds_alternative<journey::run_enter_exit>(cc.first.uses_)) {
                         auto const& cc_r = std::get<journey::run_enter_exit>(cc.first.uses_);
@@ -450,7 +480,8 @@ struct search_YR {
             auto next_starting_round = whitelist_routes.size() + 1;
             algo2.execute(start_time, q_.max_transfers_, worst_time_at_dest, q_.prf_idx_, local_pareto_set, next_starting_round);
             total_algo_stats_ = total_algo_stats_ + algo2.get_stats();
-            std::cout << "local pareto set has after black: " << local_pareto_set.els_.size() << '\n';
+            raptor_executions+=1;
+            //std::cout << "local pareto set has after black: " << local_pareto_set.els_.size() << '\n';
 
 
 
@@ -459,21 +490,23 @@ struct search_YR {
               if (candidate_j.legs_.empty() && !candidate_j.error_) {
                 try {
                   algo2.reconstruct(q_, candidate_j);
-                  std::cout << "RECONSTRUCTING SUCCESSFULL" << '\n';
+                  //std::cout << "RECONSTRUCTING SUCCESSFULL" << '\n';
                   set_B.add(candidate_j);
                   //original_pareto_set.add_not_optimal(candidate_j);
                 } catch (std::exception const& e) {
-                  std::cout << "ERROR WHILE RECONSTRUCTING" << '\n';
+                  //std::cout << "ERROR WHILE RECONSTRUCTING" << '\n';
                   candidate_j.error_ = true;
                   log(log_lvl::error, "search", "reconstruct failed: {}", e.what());
                 }
               }
             }
 
+            uint32_t next_route_idx = tt_.transport_route_[r.r_.t_.t_idx_].v_;
+            current_node_route_idx=next_route_idx;
+
             prev_node = current_node;
             current_node = &(current_node->children.at(l));
-            prev_route_idx=route_idx;
-            whitelist_routes.push_back(route_idx);
+            whitelist_routes.push_back(next_route_idx);
           }
         }
       }
@@ -499,7 +532,10 @@ struct search_YR {
     return {.journeys_ = &state_.results_,
             .interval_ = search_interval_,
             .search_stats_ = stats_,
-            .algo_stats_ = total_algo_stats_.to_map()};
+            .algo_stats_ = total_algo_stats_.to_map(),
+            .raptor_exececutions = raptor_executions,
+            .raptor_time = raptor_time,
+    };
   }
 
 private:
